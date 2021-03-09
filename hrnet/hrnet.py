@@ -194,26 +194,29 @@ class HRNet(nn.Module):
 
 if __name__ == '__main__':
     # model = HRNet(48, 17, 0.1)
-    model = HRNet(32, 17, 0.1)
-
-    # print(model)
-
-    model.load_state_dict(
-        # torch.load('./weights/pose_hrnet_w48_384x288.pth')
-        torch.load('./weights/pose_hrnet_w32_256x192.pth')
-    )
-    print('ok!!')
-
-    if torch.cuda.is_available() and False:
-        torch.backends.cudnn.deterministic = True
-        device = torch.device('cuda:0')
-    else:
-        device = torch.device('cpu')
-
-    print(device)
-
-    model = model.to(device)
-
-    y = model(torch.ones(1, 3, 384, 288).to(device))
-    print(y.shape)
-    print(torch.min(y).item(), torch.mean(y).item(), torch.max(y).item())
+    # model = HRNet(32, 17, 0.1)
+#     #
+#     # # print(model)
+#     #
+#     # # model.load_state_dict(
+#     # #     # torch.load('./weights/pose_hrnet_w48_384x288.pth')
+#     # #     torch.load('./weights/pose_hrnet_w32_256x192.pth')
+#     # # )
+#     # # print('ok!!')
+#     #
+#     # if torch.cuda.is_available() and False:
+#     #     torch.backends.cudnn.deterministic = True
+#     #     device = torch.device('cuda:0')
+#     # else:
+#     #     device = torch.device('cpu')
+#     #
+#     # print(device)
+#     #
+#     # model = model.to(device)
+#     #
+#     # y = model(torch.ones(1, 3, 384, 288).to(device))
+#     # y = y.reshape(-1, 17)
+#     # print(y.shape)
+#     # print(y)
+#     # print(torch.min(y).item(), torch.mean(y).item(), torch.max(y).item())
+    pass

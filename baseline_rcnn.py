@@ -6,14 +6,14 @@
 
 import os
 from typing import Tuple, List, Sequence, Callable, Dict
-
 import cv2
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import glob
-
+import random
+import imgaug
 import torch
 from torch import nn, Tensor
 import torch.optim as optim
@@ -27,6 +27,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from torchvision.models.detection.rpn import AnchorGenerator
 from albumentations_experimental import HorizontalFlipSymmetricKeypoints
+import timm
 
 PATH_TRAIN_CSV = './1. open/train_df.csv'
 
@@ -93,11 +94,13 @@ class KeypointDataset(Dataset):
         labels = np.array([1])
         keypoints = self.keypoints[index]
 
-        x1, y1 = min(keypoints[:, 0]), min(keypoints[:, 1])
-        x2, y2 = max(keypoints[:, 0]), max(keypoints[:, 1])
+        x1, y1 = min(keypoints[:, 0]) - 10, min(keypoints[:, 1]) - 10
+        x2, y2 = max(keypoints[:, 0]) + 10, max(keypoints[:, 1]) + 10
         boxes = np.array([[x1, y1, x2, y2]], dtype=np.int64)
 
         image = cv2.imread(self.data_imgs_dir.iloc[index].values[0], cv2.COLOR_BGR2RGB)
+        # print(self.data_imgs_dir.iloc[index].values[0])
+        # print(keypoints)
 
         targets = {
             'image': image,
@@ -123,9 +126,6 @@ class KeypointDataset(Dataset):
         return image, targets
 
 
-# In[65]:
-
-
 train_transforms = A.Compose([
     A.OneOf([
         HorizontalFlipSymmetricKeypoints(symmetric_keypoints={
@@ -137,16 +137,14 @@ train_transforms = A.Compose([
         A.RandomRotate90(p=1),
         A.VerticalFlip(p=1)], p=0.5),
     A.OneOf([
-        A.RandomBrightness(p=1),
-        A.MotionBlur(blur_limit=[3, 20], p=1),
-    ], p=0.5),
+        A.MotionBlur(p=1),
+        A.GaussNoise(p=1)
+    ], p=1),
+    A.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ToTensorV2()
 ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']),
     keypoint_params=A.KeypointParams(format='xy')
 )
-
-
-# In[66]:
 
 
 def collate_fn(batch: torch.Tensor) -> Tuple:
@@ -160,14 +158,22 @@ trainset = KeypointDataset(new_train_paths, keypoints, train_transforms)
 train_loader = DataLoader(trainset, batch_size=2, shuffle=True, collate_fn=collate_fn)
 
 
-# In[67]:
-
-
-# In[68]:
+# seed 설정
+def seed_everything(seed: int = 42):
+    random.seed(seed)
+    np.random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)  # type: ignore
+    torch.backends.cudnn.deterministic = True  # type: ignore
+    torch.backends.cudnn.benchmark = True  # type: ignore
+    imgaug.random.seed(seed)
 
 
 def get_model() -> nn.Module:
+
     backbone = resnet_fpn_backbone('resnet152', pretrained=True)
+    #backbone = timm.create_model('hrnet_w48', pretrained=True)
     roi_pooler = MultiScaleRoIAlign(
         featmap_names=['0', '1', '2', '3'],
         output_size=7,
@@ -183,7 +189,8 @@ def get_model() -> nn.Module:
     model = KeypointRCNN(
         backbone,
         num_classes=2,
-        num_keypoints=24
+        num_keypoints=24,
+        max_size=1920,
     )
 
     return model
@@ -210,15 +217,12 @@ def train(device='cuda'):
     # cuda cache 초기화
     torch.cuda.empty_cache()
 
-
     torch.cuda.empty_cache()
     model = get_model()
     model.to(device)
-    # Learning rate for optimizer
-    lr = 1e-3
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=0.001)
+    optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4)
 
-    num_epochs = 10
+    num_epochs = 20
     train_best_loss = 999999999
     early_stop_count = 0
 
@@ -247,6 +251,7 @@ def train(device='cuda'):
                 print(f'| epoch: {epoch} | loss: {loss.item():.4f}', end=' | ')
                 for k, v in losses.items():
                     print(f'{k[5:]}: {v.item():.4f}', end=' | ')
+                print(i+1)
                 print()
 
             # statistics
@@ -265,9 +270,6 @@ def train(device='cuda'):
             if early_stop_count > 5:
                 print(f'early stopped at epoch: {epoch}')
                 break
-
-
-# In[70]:
 
 
 train()
